@@ -49,6 +49,29 @@ AI-powered git commit message generator for VS Code. One click, perfect [Convent
 - **Show Logs** — Open the AI Commit output channel on demand
 - **Open in GitHub** — Open current file on GitHub
 
+## Troubleshooting
+
+### `HTTP 413` — request too large
+
+Some providers enforce a per-minute input-token budget. Groq's on-demand tier,
+for example, caps input tokens per minute (ITPM) per model, so the default
+context budget can be rejected in a single request:
+
+```
+Request too large for model ... on input tokens per minute (ITPM):
+Limit 7000, Requested 7772
+```
+
+This is a provider quota, not a malformed payload. Shrink the context budget in
+settings:
+
+- `kargnas.aiCommit.maxPatchBytes` — lower from `50000` (e.g. `16000`)
+- `kargnas.aiCommit.heavyDiffMaxFiles` — set `0` to drop full-file snapshots
+- `kargnas.aiCommit.projectTreeMaxEntries`, `openTabsLimit`,
+  `terminalLogLines`, `previousCommitLimit` — lower or zero out
+
+The budget is per minute, so consecutive runs count against the same limit.
+
 ## License
 
 MIT © [Sangrak Choi](https://kargn.as)
