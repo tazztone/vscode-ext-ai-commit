@@ -10,15 +10,18 @@
 # Documentation & meta
 AGENTS.md
 CLAUDE.md
+FORK.md
 docs/**
 scripts/**
 meta.json
 prompt/**
+test/**
 
 # Build artifacts
 *.vsix
 node_modules/**
 out/test/**
+output/**
 
 # Misc
 .DS_Store
