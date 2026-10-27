@@ -70,6 +70,45 @@ On this machine `~/.vscode-oss/extensions` is a symlink to
 same extension directory, so this patched build is active in both. That is
 intentional: the fix is provider compatibility, not editor-specific.
 
+## Known limitations
+
+### Provider token budgets (HTTP 413)
+
+Some providers cap input tokens per minute (ITPM) per model and tier. Groq's
+on-demand tier, for example, allows 7000 ITPM for `qwen/qwen3.8-27b`, while the
+extension's default context budget can exceed that in a single request:
+
+```
+Commit AI failed: HTTP 413: {"error":{"message":"Request too large for model
+`qwen/qwen3.8-27b` ... on input tokens per minute (ITPM): Limit 7000,
+Requested 7772, please reduce your message size and try again."}}
+```
+
+This is a provider quota, not a malformed payload: the same request shape is
+accepted, only the size is rejected. Reduce the context budget in
+`settings.json`:
+
+| Setting | Default | Suggested for a 7000 ITPM cap |
+| --- | --- | --- |
+| `kargnas.aiCommit.maxPatchBytes` | `50000` | `16000` |
+| `kargnas.aiCommit.heavyDiffMaxFiles` | `3` | `0` |
+| `kargnas.aiCommit.heavyDiffMaxLines` | `500` | `200` |
+| `kargnas.aiCommit.projectTreeMaxEntries` | `400` | `50` |
+| `kargnas.aiCommit.openTabsLimit` | `10` | `0` |
+| `kargnas.aiCommit.terminalLogLines` | `20` | `0` |
+| `kargnas.aiCommit.previousCommitLimit` | `10` | `1` |
+
+Notes:
+
+- `maxPatchBytes` counts **characters**, not tokens (roughly 4 characters per
+  token for code and English), and it caps the staged diff, which dominates the
+  prompt.
+- `heavy_diff_snapshots` adds up to `heavyDiffMaxFiles × heavyDiffMaxLines`
+  lines on top of the diff, so it is the second-largest contributor. Setting
+  `heavyDiffMaxFiles` to `0` disables it entirely.
+- ITPM is a per-minute budget: two AI Commit runs within the same minute count
+  against the same limit.
+
 ## Syncing with upstream
 
 ```bash
@@ -92,4 +131,6 @@ git switch main && git reset --hard upstream/main
 3. Local echo server — confirmed the wire body contains only `model`,
    `messages`, `temperature`, and `response_format`, while "Show Last Payload"
    still renders `payload.__meta.prompts`.
-4. Live Groq request against a custom `chat/completions` endpoint.
+4. Live Groq request against a custom `chat/completions` endpoint — the request
+   shape was accepted; the call then hit the provider's 7000 ITPM quota with
+   HTTP 413 (see Known limitations).
