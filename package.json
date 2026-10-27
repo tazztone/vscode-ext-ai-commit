@@ -248,6 +248,7 @@
     "@vscode/vsce": "^3.6.2"
   },
   "scripts": {
+    "test": "node --test test/*.test.js",
     "package:install": "./scripts/package-and-install.sh"
   }
 }

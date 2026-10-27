@@ -3,6 +3,7 @@ const cp = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { toRequestBody } = require('./lib/serialize');
 
 let out;
 let lastPayload = null;
@@ -1248,8 +1249,7 @@ function isResponsesObject(obj){
 }
 
 async function httpPost(cfg, payload, prompts, cancellationToken){
-  lastPayload = payload;
-  lastPayload.__meta = { prompts };
+  lastPayload = { ...payload, __meta: { prompts } };
   const stamp = new Date().toISOString();
   log(`[info] ${stamp} model=${cfg.model}`);
   log(`[info] endpoint=${cfg.endpoint}`);
@@ -1291,7 +1291,7 @@ async function httpPost(cfg, payload, prompts, cancellationToken){
       cancelSub = cancellationToken.onCancellationRequested(()=>controller.abort());
     }
     try {
-      const res = await fetch(cfg.endpoint, { method:'POST', headers, body: JSON.stringify(payload), signal: controller.signal });
+      const res = await fetch(cfg.endpoint, { method:'POST', headers, body: toRequestBody(payload), signal: controller.signal });
       const text = await res.text();
       if(cfg.logRaw) logSection('response', text.slice(0, 1000));
       if(!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 2000)}`);
@@ -1316,7 +1316,7 @@ async function httpPost(cfg, payload, prompts, cancellationToken){
 
   async function viaCurl(){
     const tmp = path.join(os.tmpdir(), `kargnas-commit-ai-${Date.now()}.json`);
-    fs.writeFileSync(tmp, JSON.stringify(payload));
+    fs.writeFileSync(tmp, toRequestBody(payload));
     const cmd = [
       'curl','-sS','-L','--max-time', String(Math.ceil(cfg.timeoutMs/1000)),
       '-H', `"Authorization: Bearer ${cfg.apiKey}"`,
