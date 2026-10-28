@@ -53,7 +53,15 @@
       },
       {
         "command": "kargnas.aiCommit.pingOpenRouter",
-        "title": "Commit AI: Ping OpenRouter"
+        "title": "Commit AI: Ping Endpoint"
+      },
+      {
+        "command": "kargnas.aiCommit.setApiKey",
+        "title": "Commit AI: Set API Key"
+      },
+      {
+        "command": "kargnas.aiCommit.clearApiKey",
+        "title": "Commit AI: Clear API Key"
       },
       {
         "command": "kargnas.aiCommit.showLastPayload",
@@ -114,7 +122,8 @@
         "kargnas.aiCommit.apiKey": {
           "type": "string",
           "default": "",
-          "description": "OpenRouter API key"
+          "description": "Deprecated: the API key is stored in SecretStorage. Run 'Commit AI: Set API Key' instead.",
+          "deprecationMessage": "The API key is now stored in SecretStorage. Run 'Commit AI: Set API Key'."
         },
         "kargnas.aiCommit.model": {
           "type": "string",
