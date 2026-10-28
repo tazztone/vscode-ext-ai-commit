@@ -7,6 +7,7 @@ const { toRequestBody } = require('./lib/serialize');
 const { normalizeApiKey, secretKeyFor } = require('./lib/api-key');
 const { endpointOrigin, modelsUrl } = require('./lib/endpoint');
 const { buildCurlArgs, formatCurlHeaders } = require('./lib/curl');
+const { gitRemoteToGitHubUrl } = require('./lib/github-url');
 
 let out;
 let secretsApi = null;
@@ -1592,27 +1593,6 @@ function showLast(){
   vscode.workspace.openTextDocument({ content, language: 'json' }).then(doc => vscode.window.showTextDocument(doc, { preview:false }));
 }
 
-/**
- * Convert git remote URL (SSH or HTTPS) to GitHub web URL
- * SSH: git@github.com:user/repo.git -> https://github.com/user/repo
- * HTTPS: https://github.com/user/repo.git -> https://github.com/user/repo
- */
-function gitRemoteToGitHubUrl(remoteUrl){
-  if(!remoteUrl) return null;
-  const trimmed = remoteUrl.trim();
-  
-  const sshMatch = trimmed.match(/^git@github\.com[:/](.+?)(?:\.git)?$/);
-  if(sshMatch) return `https://github.com/${sshMatch[1]}`;
-  
-  const sshProtoMatch = trimmed.match(/^ssh:\/\/git@github\.com\/(.+?)(?:\.git)?$/);
-  if(sshProtoMatch) return `https://github.com/${sshProtoMatch[1]}`;
-  
-  const httpsMatch = trimmed.match(/^https?:\/\/github\.com\/(.+?)(?:\.git)?$/);
-  if(httpsMatch) return `https://github.com/${httpsMatch[1]}`;
-  
-  return null;
-}
-
 async function openInGitHub(uri){
   try {
     const api = await getGitAPI();
@@ -1641,10 +1621,22 @@ async function openInGitHub(uri){
     
     const cwd = repo.rootUri.fsPath;
     
-    const [remoteUrl, branch] = await Promise.all([
-      runGit(cwd, ['remote', 'get-url', 'origin'], true),
-      runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'], true)
-    ]);
+    let remoteUrl = await runGit(cwd, ['remote', 'get-url', 'origin'], true);
+    if(!remoteUrl || !gitRemoteToGitHubUrl(remoteUrl)){
+      const remotes = (await runGit(cwd, ['remote'], true)).split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      for(const r of remotes){
+        const candidate = await runGit(cwd, ['remote', 'get-url', r], true);
+        if(candidate && gitRemoteToGitHubUrl(candidate)){
+          remoteUrl = candidate;
+          break;
+        }
+      }
+    }
+
+    let branch = await runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'], true);
+    if(!branch || branch === 'HEAD'){
+      branch = (await runGit(cwd, ['rev-parse', '--short', 'HEAD'], true)) || 'main';
+    }
     
     const baseUrl = gitRemoteToGitHubUrl(remoteUrl);
     if(!baseUrl){
