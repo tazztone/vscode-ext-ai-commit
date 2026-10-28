@@ -1180,18 +1180,9 @@ async function collectContext(repo, cfg){
     },
     intent_signals: {
       branch_hints: branchHints,
-      recent_test_failures: [],
-      linter_type_errors: [],
-      related_issues_summary: [],
       previous_commits_touching_same_symbols: previousCommits
     },
     file_summaries: fileSummaries,
-    ast_impact: {
-      public_endpoints_changed: [],
-      breaking_candidates: []
-    },
-    routes_schema_changes: [],
-    db_schema_changes: [],
     test_changes: detectTestChanges(nameStatusLines),
     diffs: diffUnified,
     project_tree: await buildProjectTree(repo, cwd, cfg, stagedStatusMap),
@@ -1208,9 +1199,6 @@ function buildUserPrompt(context){
   const intent = context.intent_signals;
   const commitLanguage = meta.commit_language || 'auto';
   const fileSummariesJson = JSON.stringify(context.file_summaries, null, 2);
-  const astImpactJson = JSON.stringify(context.ast_impact, null, 2);
-  const routesJson = JSON.stringify(context.routes_schema_changes, null, 2);
-  const dbJson = JSON.stringify(context.db_schema_changes, null, 2);
   const testsJson = JSON.stringify(context.test_changes, null, 2);
   const projectTree = (context.project_tree || []).join('\n');
   const openTabs = (context.open_tabs || []).join('\n');
@@ -1237,9 +1225,6 @@ Analyze the repository context and staged diffs. Identify every significant, use
 
 <intent_signals>
 <branch_hints>${JSON.stringify(intent.branch_hints)}</branch_hints>
-<recent_test_failures>${JSON.stringify(intent.recent_test_failures)}</recent_test_failures>
-<linter_type_errors>${JSON.stringify(intent.linter_type_errors)}</linter_type_errors>
-<related_issues>${JSON.stringify(intent.related_issues_summary)}</related_issues>
 <previous_commits>${JSON.stringify(intent.previous_commits_touching_same_symbols)}</previous_commits>
 </intent_signals>
 
@@ -1262,18 +1247,6 @@ ${context.diffs}
 <heavy_diff_snapshots>
 ${heavySnapshots || '(none)'}
 </heavy_diff_snapshots>
-
-<ast_impact>
-${astImpactJson}
-</ast_impact>
-
-<routes_schema_changes>
-${routesJson}
-</routes_schema_changes>
-
-<db_schema_changes>
-${dbJson}
-</db_schema_changes>
 
 <test_changes>
 ${testsJson}
