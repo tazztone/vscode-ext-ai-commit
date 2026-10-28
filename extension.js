@@ -631,7 +631,7 @@ async function buildProjectTree(repo, cwd, cfg, stagedStatusMap){
       node = node.children.get(key);
       if(isLeaf){
         node.isDir = false;
-        node.info = info ? cloneStatusInfo(info) : createStatusInfo();
+        node.info = createStatusInfo(info);
       }
     });
   });
@@ -655,10 +655,6 @@ function createStatusInfo(init){
     if(init.codes){ Array.from(init.codes).forEach(code=>base.codes.add(code)); }
   }
   return base;
-}
-
-function cloneStatusInfo(info){
-  return createStatusInfo(info);
 }
 
 function createTreeNode(name, fullPath, isDir){
@@ -1423,7 +1419,7 @@ async function providePullRequestTitleAndDescription(prContext, cancellationToke
   if(!cfg.apiKey){
     if(!prProviderWarnedNoKey){
       prProviderWarnedNoKey = true;
-      vscode.window.showWarningMessage('PR 제목/본문 생성을 쓰려면 "Commit AI: Set API Key" 명령으로 API 키를 먼저 설정해.');
+      vscode.window.showWarningMessage('To generate pull request title/description, run "Commit AI: Set API Key" first.');
     }
     return undefined;
   }
@@ -1462,7 +1458,7 @@ async function providePullRequestTitleAndDescription(prContext, cancellationToke
     }
     const message = err?.message || String(err);
     log('PR AI failed: ' + message);
-    vscode.window.showErrorMessage(`PR AI 실패: ${message}`);
+    vscode.window.showErrorMessage(`Commit AI (PR) failed: ${message}`);
     return undefined;
   }
 }
