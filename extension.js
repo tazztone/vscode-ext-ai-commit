@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const { normalizeApiKey, secretKeyFor } = require('./lib/api-key');
 const { endpointOrigin } = require('./lib/endpoint');
+const { buildCurlArgs, formatCurlHeaders } = require('./lib/curl');
 
 let out;
 let secretsApi = null;
@@ -441,15 +442,6 @@ async function resolveRepository(api, commandArgs){
     placeHolder: 'Choose the Git repository to use'
   });
   return choice?.repo || null;
-}
-
-function exec(cmd, cwd){
-  return new Promise((resolve, reject)=>{
-    cp.exec(cmd, { cwd, maxBuffer: 32*1024*1024 }, (err, stdout, stderr)=>{
-      if(err) return reject(new Error(stderr || err?.message || String(err)));
-      resolve({ stdout, stderr });
-    });
-  });
 }
 
 function execFile(bin, args, cwd){
@@ -1474,24 +1466,22 @@ async function httpPost(cfg, payload, prompts, cancellationToken){
   }
 
   async function viaCurl(){
-    const tmp = path.join(os.tmpdir(), `kargnas-commit-ai-${Date.now()}.json`);
-    fs.writeFileSync(tmp, JSON.stringify(payload));
-    const cmd = [
-      'curl','-sS','-L','--max-time', String(Math.ceil(cfg.timeoutMs/1000)),
-      '-H', `"Authorization: Bearer ${cfg.apiKey}"`,
-      '-H', '"Content-Type: application/json"',
-      '-H', `"HTTP-Referer: ${cfg.referer}"`,
-      '-H', `"X-Title: ${cfg.title}"`,
-      '-H', '"Accept: application/json"',
-      '-d', '@'+tmp,
-      cfg.endpoint
-    ].join(' ');
-    if(cancellationToken?.isCancellationRequested){
-      throw new Error('Request cancelled');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kargnas-commit-ai-'));
+    const bodyFile = path.join(dir, 'body.json');
+    const headerFile = path.join(dir, 'headers');
+    try {
+      fs.writeFileSync(bodyFile, JSON.stringify(payload), { mode: 0o600 });
+      fs.writeFileSync(headerFile, formatCurlHeaders(cfg), { mode: 0o600 });
+      if(cancellationToken?.isCancellationRequested){
+        throw new Error('Request cancelled');
+      }
+      const args = buildCurlArgs({ endpoint: cfg.endpoint, headerFile, bodyFile, timeoutMs: cfg.timeoutMs });
+      const { stdout } = await execFile('curl', args, process.cwd());
+      if(cfg.logRaw) logSection('response', String(stdout).slice(0,1000));
+      try { return JSON.parse(stdout); } catch { return stdout; }
+    } finally {
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
     }
-    const { stdout } = await exec(cmd, process.cwd());
-    if(cfg.logRaw) logSection('response', String(stdout).slice(0,1000));
-    try { return JSON.parse(stdout); } catch { return stdout; }
   }
 
   if (cfg.transport === 'curl') return await viaCurl();
