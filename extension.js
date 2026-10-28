@@ -12,9 +12,6 @@ let out;
 let secretsApi = null;
 let lastPayload = null;
 let lastContext = null;
-let terminalBuffer = [];
-let terminalRemainder = '';
-let terminalBufferHardLimit = 800;
 let prProviderWarnedNoKey = false;
 let prProviderRegistered = false;
 const OUTPUT_CHANNEL_NAME = 'Kargnas - AI Commit';
@@ -23,43 +20,6 @@ const SETTINGS_PREFIX = 'kargnas.aiCommit';
 function log(...args){ (out||=vscode.window.createOutputChannel(OUTPUT_CHANNEL_NAME)).appendLine(args.join(' ')); }
 function show(){ (out||=vscode.window.createOutputChannel(OUTPUT_CHANNEL_NAME)).show(true); }
 function logSection(title, body){ log(`[${title}]`); (body||'').split(/\r?\n/).forEach(line=>log(line)); }
-
-function stripAnsi(text){
-  if(!text) return '';
-  return String(text)
-    .replace(/\u001b\[[0-9;:?]*[ -\/]*[@-~]/g, '') // CSI sequences
-    .replace(/[\u0007\u0008]/g, '');
-}
-
-function pushTerminalData(chunk){
-  if(!chunk) return;
-  const sanitized = stripAnsi(chunk).replace(/\r/g, '\n');
-  const merged = terminalRemainder + sanitized;
-  const parts = merged.split('\n');
-  terminalRemainder = parts.pop() || '';
-  for(const line of parts){
-    terminalBuffer.push(line);
-    if(terminalBuffer.length > terminalBufferHardLimit){
-      terminalBuffer = terminalBuffer.slice(-terminalBufferHardLimit);
-    }
-  }
-}
-
-function setTerminalBufferHardLimit(limit){
-  const parsed = Number(limit);
-  if(Number.isFinite(parsed) && parsed > 50){
-    terminalBufferHardLimit = Math.floor(parsed);
-  }
-  if(terminalBuffer.length > terminalBufferHardLimit){
-    terminalBuffer = terminalBuffer.slice(-terminalBufferHardLimit);
-  }
-}
-
-function getTerminalSnapshot(lines){
-  const count = Math.max(0, Math.min(Number(lines) || 0, terminalBuffer.length));
-  if(!count) return [];
-  return terminalBuffer.slice(-count);
-}
 
 function clampNumber(value, fallback, min, max){
   const num = Number(value);
@@ -207,7 +167,6 @@ async function getConfig(){
     systemPrompt: (compat ? compat + '\n\n' : '') + (readSetting(c, 'systemPrompt') || SYSTEM_PROMPT),
     previousCommitLimit: clampNumber(readSetting(c, 'previousCommitLimit'), 10, 1, 25),
     openTabsLimit: clampNumber(readSetting(c, 'openTabsLimit'), 10, 0, 40),
-    terminalLogLines: clampNumber(readSetting(c, 'terminalLogLines'), 20, 0, 200),
     projectTreeMaxEntries: clampNumber(readSetting(c, 'projectTreeMaxEntries'), 400, 50, 1200),
     heavyDiffMaxLines: clampNumber(readSetting(c, 'heavyDiffMaxLines'), 500, 50, 1000),
     heavyDiffMaxFiles: clampNumber(readSetting(c, 'heavyDiffMaxFiles'), 3, 0, 6),
@@ -1206,8 +1165,6 @@ async function collectContext(repo, cfg){
   const previousCommits = await collectHistoryForFiles(cwd, Object.keys(fileDiffs), cfg.previousCommitLimit);
   const heavyDiffSnapshots = await collectHeavyDiffSnapshots(cwd, heavyHunks, cfg);
   const openTabs = collectOpenTabs(cwd, cfg.openTabsLimit);
-  setTerminalBufferHardLimit(Math.max(cfg.terminalLogLines * 5, 200));
-  const terminalRecent = getTerminalSnapshot(cfg.terminalLogLines);
 
   const fileSummaries = Object.entries(fileDiffs).map(([file, diff])=> summariseFile(file, diff));
 
@@ -1239,7 +1196,6 @@ async function collectContext(repo, cfg){
     diffs: diffUnified,
     project_tree: await buildProjectTree(repo, cwd, cfg, stagedStatusMap),
     open_tabs: openTabs,
-    terminal_recent: terminalRecent,
     heavy_diff_snapshots: heavyDiffSnapshots
   };
 
@@ -1258,7 +1214,6 @@ function buildUserPrompt(context){
   const testsJson = JSON.stringify(context.test_changes, null, 2);
   const projectTree = (context.project_tree || []).join('\n');
   const openTabs = (context.open_tabs || []).join('\n');
-  const terminalRecent = (context.terminal_recent || []).join('\n');
   const heavySnapshots = (context.heavy_diff_snapshots || []).map(entry=> {
     const header = `# ${entry.path}`;
     const body = entry.content || '';
@@ -1295,10 +1250,6 @@ ${projectTree || '(empty)'}
 <open_tabs>
 ${openTabs || '(none)'}
 </open_tabs>
-
-<terminal_recent>
-${terminalRecent || '(none)'}
-</terminal_recent>
 
 <file_summaries>
 ${fileSummariesJson}
@@ -1797,7 +1748,6 @@ async function activate(context){
     log('[secrets] migration failed: ' + (e?.message || e));
   }
 
-  // Terminal capture removed: onDidWriteTerminalData requires proposed API
   context.subscriptions.push(vscode.commands.registerCommand('kargnas.aiCommit.generate', generate));
   context.subscriptions.push(vscode.commands.registerCommand('kargnas.aiCommit.pingOpenRouter', ping));
   context.subscriptions.push(vscode.commands.registerCommand('kargnas.aiCommit.setApiKey', () => setApiKey(context)));

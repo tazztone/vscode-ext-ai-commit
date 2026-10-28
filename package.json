@@ -202,7 +202,7 @@
         "kargnas.aiCommit.terminalLogLines": {
           "type": "number",
           "default": 20,
-          "description": "How many recent integrated terminal lines to include (0 to disable)."
+          "description": "(Deprecated: terminal capture is unavailable without proposed APIs) How many recent integrated terminal lines to include."
         },
         "kargnas.aiCommit.projectTreeMaxEntries": {
           "type": "number",
