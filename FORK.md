@@ -1,9 +1,10 @@
 # Fork notes
 
 Personal fork of [kargnas/vscode-ext-ai-commit](https://github.com/kargnas/vscode-ext-ai-commit),
-carrying a fix that has not been merged upstream.
+carrying fixes that have not been merged upstream.
 
 Upstream issue: [kargnas/vscode-ext-ai-commit#17](https://github.com/kargnas/vscode-ext-ai-commit/issues/17)
+Upstream PR: [kargnas/vscode-ext-ai-commit#20](https://github.com/kargnas/vscode-ext-ai-commit/pull/20) — API keys in SecretStorage
 
 ## Why this fork exists
 
@@ -26,6 +27,7 @@ from the wire body on both transports (fetch and curl).
 | --- | --- |
 | `main` | untouched mirror of `upstream/main` |
 | `fix/meta-leak-request-body` | the fix, its tests, and this file |
+| `pr/secretstorage-api-key` | clean branch for upstream PR #20, based on `upstream/main` |
 
 Keeping the fix off `main` means `git fetch upstream && git rebase upstream/main`
 never fights local commits, and `gh repo sync` stays safe.
@@ -41,6 +43,45 @@ never fights local commits, and `gh repo sync` stays safe.
 - `.vscodeignore` — excludes `test/**`, `output/**`, `FORK.md` from the VSIX.
 - `scripts/package-codium.sh` — packages and installs into Codium.
 
+Merged from PR #20 (`pr/secretstorage-api-key`):
+
+- `lib/api-key.js` — `secretKeyFor()` maps an endpoint to its SecretStorage id.
+- `lib/endpoint.js` — `endpointOrigin()` for key identity, `modelsUrl()` for ping.
+- `lib/curl.js` — header formatting and argument building for the curl transport.
+- `extension.js` — async `getConfig()`, plaintext migration, Set/Clear API Key,
+  curl transport without the key in argv, ping against the configured endpoint.
+- `test/*.test.js` — unit and tripwire tests for the above.
+
+## API keys and SecretStorage
+
+Keys are read from `context.secrets`, not from `settings.json`. One secret is
+kept per endpoint **origin** (scheme + host + port):
+
+```
+kargnas.aiCommit.apiKey::https://api.groq.com
+kargnas.aiCommit.apiKey::https://openrouter.ai
+```
+
+Origin rather than full URL, so switching between `/chat/completions` and
+`/responses` (and `endpointRewrite`) keeps using the same key. Switching to a
+different provider needs **Commit AI: Set API Key** once for that host; the old
+key is never sent to the new endpoint.
+
+Migration runs on activation: an existing plaintext `kargnas.aiCommit.apiKey` is
+written to SecretStorage, read back to confirm it persisted, and only then
+removed from user/workspace/workspace-folder settings. If the keyring fails or
+the value does not come back, the plaintext copy stays and the extension keeps
+reading it as a fallback. **Commit AI: Clear API Key** removes both the secret
+and any leftover plaintext copy.
+
+Consequences worth remembering:
+
+- SecretStorage is per machine and is **not** synced by Settings Sync. The
+  removal of the setting *does* sync, so other machines need the key re-entered.
+- On Linux the secret lives in gnome-keyring/KWallet; without either, Chromium
+  falls back to a weaker store.
+- Rotate any key that was ever in a synced or committed `settings.json`.
+
 ## Build and install
 
 ```bash
@@ -54,6 +95,14 @@ Then reload the editor window.
 The script packages committed `HEAD` (via `git archive`) into a temp directory,
 bumps the patch version **there only**, and installs the result. The committed
 `package.json` keeps upstream's version, so rebases stay clean.
+
+Pass `VERSION` to override the bump when the computed version is already
+installed (for example after merging a branch without changing upstream's
+version):
+
+```bash
+VERSION=1.0.26 ./scripts/package-codium.sh
+```
 
 ## Version policy
 
@@ -118,6 +167,9 @@ npm ci && npm test
 ./scripts/package-codium.sh
 ```
 
+`pr/secretstorage-api-key` is rebased separately for the upstream PR; it must not
+contain `FORK.md`, the serializer fix, or `output/`.
+
 If upstream ever ships this fix, drop the branch and install from the marketplace:
 
 ```bash
@@ -126,11 +178,18 @@ git switch main && git reset --hard upstream/main
 
 ## Verification used
 
-1. `npm test` — serializer and tripwire tests.
-2. `npx @vscode/vsce package` — mirrors the upstream CI packaging step.
+1. `npm test` — serializer, key-storage, curl and tripwire tests.
+2. `npx @vscode/vsce package` — mirrors the upstream CI packaging step, and
+   confirms `lib/` ships while `test/` and `FORK.md` do not.
 3. Local echo server — confirmed the wire body contains only `model`,
    `messages`, `temperature`, and `response_format`, while "Show Last Payload"
    still renders `payload.__meta.prompts`.
-4. Live Groq request against a custom `chat/completions` endpoint — the request
+4. Stubbed VS Code host driving the real `extension.js` — migration, per-origin
+   key selection, set/clear, stale-plaintext removal, and the failed-persistence
+   fallback.
+5. Local HTTP server + real curl — Authorization and body arrive, the key is
+   absent from `ps` while curl runs, the temp directory is `0700` with `0600`
+   files, and cleanup happens on success and failure.
+6. Live Groq request against a custom `chat/completions` endpoint — the request
    shape was accepted; the call then hit the provider's 7000 ITPM quota with
    HTTP 413 (see Known limitations).
