@@ -254,13 +254,17 @@ async function migrateLegacyApiKey(context){
   if(!stored){
     try {
       await context.secrets.store(id, legacy);
-      stored = legacy;
-      migrated = true;
-      log(`[secrets] moved the settings.json API key to SecretStorage for ${origin}`);
+      stored = normalizeApiKey(await context.secrets.get(id));
     } catch(e){
       log(`[secrets] could not store the API key; keeping the settings.json copy: ${e?.message || e}`);
       return;
     }
+    if(!stored){
+      log('[secrets] SecretStorage did not persist the API key; keeping the settings.json copy');
+      return;
+    }
+    migrated = true;
+    log(`[secrets] moved the settings.json API key to SecretStorage for ${origin}`);
   } else if(stored !== legacy){
     log(`[secrets] a different key is already stored for ${origin}; the settings.json copy is ignored`);
   }
@@ -366,6 +370,7 @@ async function clearApiKey(context){
     vscode.window.showErrorMessage(`Could not remove the API key: ${e?.message || e}`);
     return;
   }
+  await removeLegacyApiKeySetting('');
   vscode.window.showInformationMessage(`API key removed for ${origin}.`);
 }
 
