@@ -3,8 +3,11 @@ const cp = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { normalizeApiKey, secretKeyFor } = require('./lib/api-key');
+const { endpointOrigin } = require('./lib/endpoint');
 
 let out;
+let secretsApi = null;
 let lastPayload = null;
 let lastContext = null;
 let terminalBuffer = [];
@@ -177,16 +180,18 @@ function normalizeModel(model){
   return model;
 }
 
-function getConfig(){
+async function getConfig(){
   const c = vscode.workspace.getConfiguration();
   const commitLanguageRaw = readSetting(c, 'commitLanguage');
   const commitLanguage = commitLanguageRaw === undefined ? '' : String(commitLanguageRaw || '').trim();
   const endpointRaw = readSetting(c, 'endpoint') || 'https://openrouter.ai/api/v1/chat/completions';
   const endpoint = normalizeEndpoint(endpointRaw, !!readSetting(c, 'endpointRewrite'));
   const compat = c.get('dish-ai-commit.features.branchName.systemPrompt', '');
+  const apiKey = await readStoredApiKey(endpointRaw);
   return {
-    apiKey: readSetting(c, 'apiKey') || '',
+    apiKey,
     model: normalizeModel(readSetting(c, 'model') || 'google/gemini-2.5-flash-lite'),
+    endpointRaw,
     endpoint,
     transport: readSetting(c, 'transport') || 'fetch',
     timeoutMs: readSetting(c, 'requestTimeoutMs') || 25000,
@@ -207,6 +212,160 @@ function getConfig(){
     logPromptMaxChars: clampNumber(readSetting(c, 'logPromptMaxChars'), 0, 0, 1000000),
     commitLanguage
   };
+}
+
+function currentEndpoint(){
+  return readSetting(vscode.workspace.getConfiguration(), 'endpoint') || 'https://openrouter.ai/api/v1/chat/completions';
+}
+
+async function readStoredApiKey(endpoint){
+  let secret = '';
+  try {
+    secret = normalizeApiKey(await secretsApi?.get(secretKeyFor(endpoint)));
+  } catch(e){
+    log(`[secrets] could not read the API key for ${endpointOrigin(endpoint)}: ${e?.message || e}`);
+  }
+  if(secret) return secret;
+
+  const legacy = normalizeApiKey(readSetting(vscode.workspace.getConfiguration(), 'apiKey'));
+  if(legacy){
+    log('[secrets] using the deprecated settings.json API key; run "Commit AI: Set API Key" to move it to SecretStorage');
+  }
+  return legacy;
+}
+
+async function migrateLegacyApiKey(context){
+  const legacy = normalizeApiKey(readSetting(vscode.workspace.getConfiguration(), 'apiKey'));
+  if(!legacy) return;
+
+  const endpoint = currentEndpoint();
+  const origin = endpointOrigin(endpoint);
+  const id = secretKeyFor(endpoint);
+  let stored = '';
+  try {
+    stored = normalizeApiKey(await context.secrets.get(id));
+  } catch(e){
+    log(`[secrets] could not read SecretStorage; keeping the settings.json API key: ${e?.message || e}`);
+    return;
+  }
+
+  let migrated = false;
+  if(!stored){
+    try {
+      await context.secrets.store(id, legacy);
+      stored = legacy;
+      migrated = true;
+      log(`[secrets] moved the settings.json API key to SecretStorage for ${origin}`);
+    } catch(e){
+      log(`[secrets] could not store the API key; keeping the settings.json copy: ${e?.message || e}`);
+      return;
+    }
+  } else if(stored !== legacy){
+    log(`[secrets] a different key is already stored for ${origin}; the settings.json copy is ignored`);
+  }
+
+  const removed = await removeLegacyApiKeySetting(legacy);
+  if(migrated && !hasLegacyApiKeySetting()){
+    vscode.window.showInformationMessage('API key moved to SecretStorage. Settings Sync does not sync secrets — set the key again on your other machines.');
+  } else if(migrated && hasLegacyApiKeySetting()){
+    vscode.window.showWarningMessage('API key stored in SecretStorage, but the plaintext copy in settings.json could not be removed.');
+  } else if(!migrated && removed){
+    log('[secrets] removed a stale plaintext API key; the stored secret is unchanged');
+  }
+}
+
+function hasLegacyApiKeySetting(){
+  try {
+    const inspected = vscode.workspace.getConfiguration().inspect(`${SETTINGS_PREFIX}.apiKey`) || {};
+    return ['globalValue','workspaceValue','workspaceFolderValue']
+      .some(property => normalizeApiKey(inspected[property]));
+  } catch {
+    return false;
+  }
+}
+
+async function removeLegacyApiKeySetting(expected){
+  const config = vscode.workspace.getConfiguration();
+  const section = `${SETTINGS_PREFIX}.apiKey`;
+  const levels = [
+    ['globalValue', vscode.ConfigurationTarget.Global, 'user'],
+    ['workspaceValue', vscode.ConfigurationTarget.Workspace, 'workspace'],
+    ['workspaceFolderValue', vscode.ConfigurationTarget.WorkspaceFolder, 'workspace folder']
+  ];
+
+  let removed = false;
+  for(const [property, target, label] of levels){
+    let value;
+    try {
+      value = normalizeApiKey((config.inspect(section) || {})[property]);
+    } catch {
+      continue;
+    }
+    if(!value) continue;
+    if(expected && value !== expected){
+      log(`[secrets] leaving the ${label} API key in place because it changed during migration`);
+      continue;
+    }
+    try {
+      await config.update(section, undefined, target);
+      removed = true;
+      log(`[secrets] removed the plaintext API key from ${label} settings`);
+    } catch(e){
+      log(`[secrets] could not remove the ${label} API key: ${e?.message || e}`);
+    }
+  }
+
+  try {
+    const inspected = config.inspect(section) || {};
+    const languageScoped = ['globalLanguageValue','workspaceLanguageValue','workspaceFolderLanguageValue']
+      .some(property => normalizeApiKey(inspected[property]));
+    if(languageScoped) log('[secrets] a language-scoped apiKey override is still set; remove it manually');
+  } catch {}
+
+  return removed;
+}
+
+async function setApiKey(context){
+  const endpoint = currentEndpoint();
+  const origin = endpointOrigin(endpoint);
+  const value = await vscode.window.showInputBox({
+    title: 'Commit AI: Set API Key',
+    prompt: `Stored in SecretStorage for ${origin} — not in settings.json.`,
+    password: true,
+    ignoreFocusOut: true,
+    validateInput: input => normalizeApiKey(input) ? undefined : 'API key cannot be empty.'
+  });
+  if(value === undefined) return;
+
+  const key = normalizeApiKey(value);
+  try {
+    await context.secrets.store(secretKeyFor(endpoint), key);
+  } catch(e){
+    vscode.window.showErrorMessage(`Could not store the API key: ${e?.message || e}`);
+    return;
+  }
+
+  await removeLegacyApiKeySetting('');
+  vscode.window.showInformationMessage(`API key saved for ${origin}.`);
+}
+
+async function clearApiKey(context){
+  const endpoint = currentEndpoint();
+  const origin = endpointOrigin(endpoint);
+  const choice = await vscode.window.showWarningMessage(
+    `Remove the API key stored for ${origin}?`,
+    { modal: true },
+    'Remove'
+  );
+  if(choice !== 'Remove') return;
+
+  try {
+    await context.secrets.delete(secretKeyFor(endpoint));
+  } catch(e){
+    vscode.window.showErrorMessage(`Could not remove the API key: ${e?.message || e}`);
+    return;
+  }
+  vscode.window.showInformationMessage(`API key removed for ${origin}.`);
 }
 
 async function getGitAPI(){
@@ -1340,11 +1499,11 @@ async function httpPost(cfg, payload, prompts, cancellationToken){
 }
 
 async function providePullRequestTitleAndDescription(prContext, cancellationToken){
-  const cfg = getConfig();
+  const cfg = await getConfig();
   if(!cfg.apiKey){
     if(!prProviderWarnedNoKey){
       prProviderWarnedNoKey = true;
-      vscode.window.showWarningMessage('PR 제목/본문 생성을 쓰려면 kargnas.aiCommit.apiKey 를 먼저 설정해.');
+      vscode.window.showWarningMessage('PR 제목/본문 생성을 쓰려면 "Commit AI: Set API Key" 명령으로 API 키를 먼저 설정해.');
     }
     return undefined;
   }
@@ -1440,8 +1599,8 @@ async function generate(...commandArgs){
     const stagedOk = await ensureStagedOrOfferStageAll(repo);
     if(!stagedOk) { log('Aborted: no staged changes.'); return; }
 
-    const cfg = getConfig();
-    if(!cfg.apiKey) return vscode.window.showErrorMessage('Set kargnas.aiCommit.apiKey first');
+    const cfg = await getConfig();
+    if(!cfg.apiKey) return vscode.window.showErrorMessage('Set an API key first: run "Commit AI: Set API Key".');
 
     const context = await collectContext(repo, cfg);
     const baseSystemPrompt = cfg.systemPrompt || SYSTEM_PROMPT;
@@ -1479,7 +1638,7 @@ async function generate(...commandArgs){
 
 async function ping(){
   try{
-    const cfg = getConfig();
+    const cfg = await getConfig();
     const url = 'https://openrouter.ai/api/v1/models';
     const res = await fetch(url, { method:'GET', headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Accept': 'application/json' } });
     const text = await res.text();
@@ -1617,12 +1776,20 @@ async function openInGitHub(uri){
   }
 }
 
-function activate(context){
+async function activate(context){
   log('Kargnas - AI Commit activated at ' + new Date().toISOString());
-  
+  secretsApi = context.secrets;
+  try {
+    await migrateLegacyApiKey(context);
+  } catch(e){
+    log('[secrets] migration failed: ' + (e?.message || e));
+  }
+
   // Terminal capture removed: onDidWriteTerminalData requires proposed API
   context.subscriptions.push(vscode.commands.registerCommand('kargnas.aiCommit.generate', generate));
   context.subscriptions.push(vscode.commands.registerCommand('kargnas.aiCommit.pingOpenRouter', ping));
+  context.subscriptions.push(vscode.commands.registerCommand('kargnas.aiCommit.setApiKey', () => setApiKey(context)));
+  context.subscriptions.push(vscode.commands.registerCommand('kargnas.aiCommit.clearApiKey', () => clearApiKey(context)));
   context.subscriptions.push(vscode.commands.registerCommand('kargnas.aiCommit.showLastPayload', showLast));
   context.subscriptions.push(vscode.commands.registerCommand('kargnas.aiCommit.showLogs', show));
   context.subscriptions.push(vscode.commands.registerCommand('kargnas.aiCommit.openInGitHub', openInGitHub));
