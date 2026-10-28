@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Package this fork at upstream-version + 1 patch and install it into Codium.
+# Package this fork at upstream-version + 1 patch (or $VERSION when set) and
+# install it into Codium.
 #
 # The version bump happens in a staging copy of HEAD only, so the working tree
 # and the committed package.json stay aligned with upstream (rebase-friendly),
@@ -18,15 +19,23 @@ fi
 git -C "$ROOT" archive HEAD | tar -x -C "$STAGE"
 git -C "$STAGE" init -q
 
-node - "$STAGE/package.json" <<'NODE'
+node - "$STAGE/package.json" "${VERSION:-}" <<'NODE'
 const fs = require('fs');
 const file = process.argv[2];
+const override = process.argv[3];
 const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
-const [major, minor, patch] = pkg.version.split('.').map(Number);
-if ([major, minor, patch].some(Number.isNaN)) {
-  throw new Error('invalid version: ' + pkg.version);
+if (override) {
+  if (!/^\d+\.\d+\.\d+$/.test(override)) {
+    throw new Error('invalid VERSION: ' + override);
+  }
+  pkg.version = override;
+} else {
+  const [major, minor, patch] = pkg.version.split('.').map(Number);
+  if ([major, minor, patch].some(Number.isNaN)) {
+    throw new Error('invalid version: ' + pkg.version);
+  }
+  pkg.version = `${major}.${minor}.${patch + 1}`;
 }
-pkg.version = `${major}.${minor}.${patch + 1}`;
 fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
 NODE
 
