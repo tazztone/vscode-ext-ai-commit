@@ -53,7 +53,7 @@
       },
       {
         "command": "kargnas.aiCommit.pingOpenRouter",
-        "title": "Commit AI: Ping OpenRouter"
+        "title": "Commit AI: Ping Endpoint"
       },
       {
         "command": "kargnas.aiCommit.setApiKey",

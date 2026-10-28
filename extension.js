@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { normalizeApiKey, secretKeyFor } = require('./lib/api-key');
-const { endpointOrigin } = require('./lib/endpoint');
+const { endpointOrigin, modelsUrl } = require('./lib/endpoint');
 const { buildCurlArgs, formatCurlHeaders } = require('./lib/curl');
 
 let out;
@@ -1629,12 +1629,29 @@ async function generate(...commandArgs){
 async function ping(){
   try{
     const cfg = await getConfig();
-    const url = 'https://openrouter.ai/api/v1/models';
-    const res = await fetch(url, { method:'GET', headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Accept': 'application/json' } });
+    const url = modelsUrl(cfg.endpointRaw);
+    if(!url){
+      vscode.window.showErrorMessage('Ping failed: the configured endpoint is not a valid URL.');
+      return;
+    }
+
+    const headers = { 'Accept': 'application/json' };
+    if(cfg.apiKey) headers['Authorization'] = `Bearer ${cfg.apiKey}`;
+    const res = await fetch(url, { method:'GET', headers });
     const text = await res.text();
     log(`Ping GET ${url} -> ${res.status}`);
     log(text.slice(0, 400));
-    vscode.window.showInformationMessage(`OpenRouter ping: ${res.ok ? 'OK' : ('Failed ' + res.status)}`);
+
+    if(res.ok){
+      const suffix = cfg.apiKey ? '' : ' (no API key stored for this endpoint)';
+      vscode.window.showInformationMessage(`Ping OK — ${url}${suffix}`);
+    } else if(res.status === 401 || res.status === 403){
+      vscode.window.showErrorMessage(`API key rejected (${res.status}) by ${endpointOrigin(url)}`);
+    } else if(res.status === 404 || res.status === 405){
+      vscode.window.showWarningMessage(`${endpointOrigin(url)} reachable; /models is not exposed, so the key could not be validated.`);
+    } else {
+      vscode.window.showErrorMessage(`Ping failed: HTTP ${res.status}`);
+    }
   }catch(e){
     log('Ping failed: ' + (e?.message || e));
     vscode.window.showErrorMessage('Ping failed: ' + (e?.message || e));

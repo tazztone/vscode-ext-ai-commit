@@ -61,7 +61,7 @@ Notes:
 - **AI Commit** — Generate commit message from staged changes
 - **Set API Key** — Store the key for the configured endpoint in SecretStorage
 - **Clear API Key** — Remove the stored key for the configured endpoint
-- **Ping OpenRouter** — Test API connection
+- **Ping Endpoint** — Test the configured endpoint and its key
 - **Show Last Payload** — Debug prompt/context
 - **Show Logs** — Open the AI Commit output channel on demand
 - **Open in GitHub** — Open current file on GitHub
