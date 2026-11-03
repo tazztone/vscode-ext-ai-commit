@@ -58,7 +58,7 @@ test('systemPrompt setting has disambiguating description in package.json', () =
 test('getConfig reads customInstructions and generate passes it to buildUserPrompt', () => {
   assert.match(source, /readSetting\(c,\s*'customInstructions'\)/);
   assert.match(source, /\bcustomInstructions\s*[,}]/);
-  assert.match(source, /buildUserPrompt\(context,\s*cfg\.customInstructions\)/);
+  assert.match(source, /buildUserPrompt\(context,\s*cfg\b/);
 });
 
 test('buildUserPrompt omits user_instructions when empty or whitespace', () => {

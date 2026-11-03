@@ -248,6 +248,18 @@
           "editPresentation": "multilineText",
           "description": "Custom instructions or rules injected into the prompt for commit message generation (e.g., 'always use imperative mood', 'mention Jira ticket from branch', 'keep scope under 12 characters')."
         },
+        "kargnas.aiCommit.instructionPrompt": {
+          "type": "string",
+          "default": "",
+          "editPresentation": "multilineText",
+          "description": "Custom override for the <instructions> section of the prompt. Leave empty to use built-in instructions."
+        },
+        "kargnas.aiCommit.taskPrompt": {
+          "type": "string",
+          "default": "",
+          "editPresentation": "multilineText",
+          "description": "Custom override for the <task> section of the prompt. Leave empty to use built-in task prompt."
+        },
         "kargnas.aiCommit.systemPrompt": {
           "type": "string",
           "default": "You write excellent Conventional Commits for engineers and PMs.",

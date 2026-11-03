@@ -149,6 +149,10 @@ async function getConfig(){
   const commitLanguage = commitLanguageRaw === undefined ? '' : String(commitLanguageRaw || '').trim();
   const customInstructionsRaw = readSetting(c, 'customInstructions');
   const customInstructions = customInstructionsRaw === undefined ? '' : String(customInstructionsRaw || '').trim();
+  const instructionPromptRaw = readSetting(c, 'instructionPrompt');
+  const instructionPrompt = instructionPromptRaw === undefined ? '' : String(instructionPromptRaw || '').trim();
+  const taskPromptRaw = readSetting(c, 'taskPrompt');
+  const taskPrompt = taskPromptRaw === undefined ? '' : String(taskPromptRaw || '').trim();
   const endpointRaw = readSetting(c, 'endpoint') || 'https://openrouter.ai/api/v1/chat/completions';
   const endpoint = normalizeEndpoint(endpointRaw, !!readSetting(c, 'endpointRewrite'));
   const compat = c.get('dish-ai-commit.features.branchName.systemPrompt', '');
@@ -176,7 +180,9 @@ async function getConfig(){
     logPromptMaxChars: clampNumber(readSetting(c, 'logPromptMaxChars'), 0, 0, 1000000),
     autoStage: !!readSetting(c, 'autoStage'),
     commitLanguage,
-    customInstructions
+    customInstructions,
+    instructionPrompt,
+    taskPrompt
   };
 }
 
@@ -1242,7 +1248,7 @@ async function collectContext(repo, cfg){
   return context;
 }
 
-function buildUserPrompt(context, customInstructions){
+function buildUserPrompt(context, opts){
   const meta = context.repo_meta;
   const intent = context.intent_signals;
   const commitLanguage = meta.commit_language || 'auto';
@@ -1256,12 +1262,28 @@ function buildUserPrompt(context, customInstructions){
     return `${header}\n${body}`;
   }).join('\n\n');
 
-  const trimmedCustom = (customInstructions || '').trim();
+  const customInstructions = typeof opts === 'string' ? opts : (opts?.customInstructions || '');
+  const instructionPrompt = typeof opts === 'object' ? (opts?.instructionPrompt || '') : '';
+  const taskPrompt = typeof opts === 'object' ? (opts?.taskPrompt || '') : '';
+
+  const trimmedCustom = customInstructions.trim();
   const userInstructionsBlock = trimmedCustom ? `\n\n<user_instructions>\n${trimmedCustom}\n</user_instructions>` : '';
   const taskCustomDirective = trimmedCustom ? '\n- Comply strictly with all directives provided in <user_instructions>.' : '';
 
+  const instructionsBody = instructionPrompt.trim() || 'Analyze the repository context and staged diffs. Identify every significant, user-visible change and gather the literal values (versions, configuration keys, renamed resources).';
+
+  const defaultTask = `Produce one commit_message JSON object that satisfies the schema referenced by the system prompt and COMMIT_RESPONSE_FORMAT.
+- Select the most accurate commit type based on the primary change: docs (documentation/markdown), test (tests/fixtures), fix (bug repairs), feat (features/enhancements), chore (maintenance/dependencies), refactor (restructuring), style (formatting), perf (performance).
+- Pick the most representative scope token (single lowercase module/folder name) or "" when ambiguous.
+- Craft the subject in the requested language, combine all primary changes in one sentence, and embed explicit values (version changes, renamed services, configuration keys and new values).
+- Emit the body as a JSON array of terse fragments in the requested language (e.g., "env config cleanup"), one per significant change, each naming the concrete artifact/key/value and omitting terminal punctuation. For small, single-purpose changes where the subject is fully explanatory, emit an empty body array [].
+- Cover every significant change surfaced in the context without inventing data or repeating git metadata.
+- Ignore the languages used in previous commits or diffs; the subject, body, and rationale must obey the requested language_instruction exactly. If compliance is impossible, emit LANGUAGE_POLICY_VIOLATION per the language_instruction guidance.`;
+
+  const taskBody = taskPrompt.trim() || defaultTask;
+
   return `<instructions>
-Analyze the repository context and staged diffs. Identify every significant, user-visible change and gather the literal values (versions, configuration keys, renamed resources).
+${instructionsBody}
 </instructions>${userInstructionsBlock}
 
 <context>
@@ -1306,13 +1328,7 @@ ${testsJson}
 </context>
 
 <task>
-Produce one commit_message JSON object that satisfies the schema referenced by the system prompt and COMMIT_RESPONSE_FORMAT.
-- Select the most accurate commit type based on the primary change: docs (documentation/markdown), test (tests/fixtures), fix (bug repairs), feat (features/enhancements), chore (maintenance/dependencies), refactor (restructuring), style (formatting), perf (performance).
-- Pick the most representative scope token (single lowercase module/folder name) or "" when ambiguous.
-- Craft the subject in the requested language, combine all primary changes in one sentence, and embed explicit values (version changes, renamed services, configuration keys and new values).
-- Emit the body as a JSON array of terse fragments in the requested language (e.g., "env config cleanup"), one per significant change, each naming the concrete artifact/key/value and omitting terminal punctuation. For small, single-purpose changes where the subject is fully explanatory, emit an empty body array [].
-- Cover every significant change surfaced in the context without inventing data or repeating git metadata.
-- Ignore the languages used in previous commits or diffs; the subject, body, and rationale must obey the requested language_instruction exactly. If compliance is impossible, emit LANGUAGE_POLICY_VIOLATION per the language_instruction guidance.${taskCustomDirective}
+${taskBody}${taskCustomDirective}
 </task>`;
 }
 
@@ -1578,7 +1594,7 @@ async function generate(...commandArgs){
     const baseSystemPrompt = cfg.systemPrompt || SYSTEM_PROMPT;
     const languageInstruction = buildLanguageInstruction(cfg.commitLanguage);
     const systemPrompt = languageInstruction ? `${baseSystemPrompt}\n${languageInstruction}` : baseSystemPrompt;
-    const userPrompt = buildUserPrompt(context, cfg.customInstructions);
+    const userPrompt = buildUserPrompt(context, cfg);
 
     const payload = isResponses(cfg.endpoint)
       ? { model: cfg.model, input: toResponses([{role:'system',content:systemPrompt},{role:'user',content:userPrompt}]), temperature: 0.2, max_output_tokens: 800 }
