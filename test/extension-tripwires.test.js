@@ -31,3 +31,15 @@ test('both API key commands are declared in package.json', () => {
     /SecretStorage/
   );
 });
+
+test('autoStage configuration setting is declared and read in getConfig', () => {
+  const setting = pkg.contributes.configuration.properties['kargnas.aiCommit.autoStage'];
+  assert.ok(setting, 'kargnas.aiCommit.autoStage must be registered in package.json');
+  assert.equal(setting.type, 'boolean');
+  assert.equal(setting.default, false);
+
+  assert.match(source, /autoStage:\s*!!readSetting\(c,\s*'autoStage'\)/);
+  assert.match(source, /async function ensureStagedOrOfferStageAll\(repo,\s*autoStage\s*=\s*false\)/);
+  assert.match(source, /ensureStagedOrOfferStageAll\(repo,\s*cfg\.autoStage\)/);
+});
+

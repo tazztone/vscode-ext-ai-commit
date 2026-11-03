@@ -84,6 +84,7 @@
 | 設定 | 預設值 | 說明 |
 |------|--------|------|
 | `kargnas.aiCommit.apiKey` | `""` | OpenRouter API 金鑰 (必要) |
+| `kargnas.aiCommit.autoStage` | `false` | 無暫存變更時無需確認自動全部暫存 |
 | `kargnas.aiCommit.model` | `"google/gemini-2.5-flash-lite"` | OpenRouter 模型 ID |
 | `kargnas.aiCommit.endpoint` | OpenRouter API | 自訂 API 端點 (進階) |
 | `kargnas.aiCommit.commitLanguage` | `"auto"` | 提交訊息語言 (例如 `"ko"`、`"ja"`) |

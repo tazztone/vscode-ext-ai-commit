@@ -48,6 +48,7 @@ Notes:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `kargnas.aiCommit.apiKey` | — | Deprecated; use **Commit AI: Set API Key** |
+| `kargnas.aiCommit.autoStage` | `false` | Auto-stage all changes without prompting if none staged |
 | `kargnas.aiCommit.model` | `google/gemini-2.5-flash-lite` | Model ID |
 | `kargnas.aiCommit.commitLanguage` | `auto` | Output language (`ko`, `ja`, etc.) |
 | `kargnas.aiCommit.maxPatchBytes` | `50000` | Max total diff size |

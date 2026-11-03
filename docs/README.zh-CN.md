@@ -84,6 +84,7 @@ AI 自动分析你的代码改动,生成高质量的 git 提交信息。支持�
 | 设置 | 默认值 | 说明 |
 |------|--------|------|
 | `kargnas.aiCommit.apiKey` | `""` | OpenRouter API 密钥 (必需) |
+| `kargnas.aiCommit.autoStage` | `false` | 无暂存更改时无需确认自动全部暂存 |
 | `kargnas.aiCommit.model` | `"google/gemini-2.5-flash-lite"` | OpenRouter 模型 ID |
 | `kargnas.aiCommit.endpoint` | OpenRouter API | 自定义 API 端点 (高级) |
 | `kargnas.aiCommit.commitLanguage` | `"auto"` | 提交信息语言 (如 `"ko"`、`"ja"`) |

@@ -119,6 +119,11 @@
     "configuration": {
       "title": "Kargnas - AI Commit",
       "properties": {
+        "kargnas.aiCommit.autoStage": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically stage all changes without prompting when no changes are staged."
+        },
         "kargnas.aiCommit.apiKey": {
           "type": "string",
           "default": "",

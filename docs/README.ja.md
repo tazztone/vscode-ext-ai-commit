@@ -84,6 +84,7 @@ AI がコードの変更内容を分析して、高品質な git コミットメ
 | 設定 | デフォルト値 | 説明 |
 |------|------------|------|
 | `kargnas.aiCommit.apiKey` | `""` | OpenRouter API キー (必須) |
+| `kargnas.aiCommit.autoStage` | `false` | ステージされた変更がない場合に確認なしで自動ステージ |
 | `kargnas.aiCommit.model` | `"google/gemini-2.5-flash-lite"` | OpenRouter モデル ID |
 | `kargnas.aiCommit.endpoint` | OpenRouter API | カスタム API エンドポイント (上級者向け) |
 | `kargnas.aiCommit.commitLanguage` | `"auto"` | コミットメッセージの言語 (例: `"ko"`、`"ja"`) |

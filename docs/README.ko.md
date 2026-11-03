@@ -84,6 +84,7 @@ AI가 코드 변경사항을 분석해서 고품질 커밋 메시지를 자동�
 | 설정 | 기본값 | 설명 |
 |------|--------|------|
 | `kargnas.aiCommit.apiKey` | `""` | OpenRouter API 키 (필수) |
+| `kargnas.aiCommit.autoStage` | `false` | 스테이징된 변경사항이 없을 때 확인 없이 자동 스테이징 |
 | `kargnas.aiCommit.model` | `"google/gemini-2.5-flash-lite"` | OpenRouter 모델 ID |
 | `kargnas.aiCommit.endpoint` | OpenRouter API | 커스텀 API 엔드포인트 (고급) |
 | `kargnas.aiCommit.commitLanguage` | `"auto"` | 커밋 메시지 언어 (예: `"ko"`, `"ja"`) |

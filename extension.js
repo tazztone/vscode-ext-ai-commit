@@ -172,6 +172,7 @@ async function getConfig(){
     heavyDiffMaxLines: clampNumber(readSetting(c, 'heavyDiffMaxLines'), 500, 50, 1000),
     heavyDiffMaxFiles: clampNumber(readSetting(c, 'heavyDiffMaxFiles'), 3, 0, 6),
     logPromptMaxChars: clampNumber(readSetting(c, 'logPromptMaxChars'), 0, 0, 1000000),
+    autoStage: !!readSetting(c, 'autoStage'),
     commitLanguage
   };
 }
@@ -419,15 +420,21 @@ function execFile(bin, args, cwd){
   });
 }
 
-async function ensureStagedOrOfferStageAll(repo){
+async function ensureStagedOrOfferStageAll(repo, autoStage = false){
   const count = repo.state.indexChanges?.length || 0;
   if(count>0) return true;
-  const pick = await vscode.window.showWarningMessage('No staged changes. Stage all and continue?', 'Stage all', 'Cancel');
-  if(pick !== 'Stage all') return false;
+  if(!autoStage){
+    const pick = await vscode.window.showWarningMessage('No staged changes. Stage all and continue?', 'Stage all', 'Cancel');
+    if(pick !== 'Stage all') return false;
+  }
   await vscode.commands.executeCommand('git.stageAll');
   await new Promise(r=>setTimeout(r, 200));
   try { await repo.status(); } catch {}
-  return (repo.state.indexChanges?.length || 0) > 0;
+  const stagedCount = repo.state.indexChanges?.length || 0;
+  if(stagedCount === 0 && autoStage){
+    vscode.window.showInformationMessage('No changes to stage or commit.');
+  }
+  return stagedCount > 0;
 }
 
 async function runGit(cwd, args, allowEmpty = true){
@@ -1512,11 +1519,12 @@ async function generate(...commandArgs){
     const api = await getGitAPI();
     const repo = await resolveRepository(api, commandArgs);
     if(!repo) return vscode.window.showErrorMessage('No Git repository open');
-    const stagedOk = await ensureStagedOrOfferStageAll(repo);
-    if(!stagedOk) { log('Aborted: no staged changes.'); return; }
 
     const cfg = await getConfig();
     if(!cfg.apiKey) return vscode.window.showErrorMessage('Set an API key first: run "Commit AI: Set API Key".');
+
+    const stagedOk = await ensureStagedOrOfferStageAll(repo, cfg.autoStage);
+    if(!stagedOk) { log('Aborted: no staged changes.'); return; }
 
     const context = await collectContext(repo, cfg);
     const baseSystemPrompt = cfg.systemPrompt || SYSTEM_PROMPT;
