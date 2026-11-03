@@ -51,6 +51,8 @@ Notes:
 | `kargnas.aiCommit.autoStage` | `false` | Auto-stage all changes without prompting if none staged |
 | `kargnas.aiCommit.model` | `google/gemini-2.5-flash-lite` | Model ID |
 | `kargnas.aiCommit.commitLanguage` | `auto` | Output language (`ko`, `ja`, etc.) |
+| `kargnas.aiCommit.customInstructions` | `""` | Custom rules/instructions for commit messages |
+| `kargnas.aiCommit.systemPrompt` | `"You write excellent..."` | System persona/role (use customInstructions for rules) |
 | `kargnas.aiCommit.maxPatchBytes` | `50000` | Max total diff size |
 | `kargnas.aiCommit.previousCommitLimit` | `10` | Recent commits for context |
 | `kargnas.aiCommit.transport` | `fetch` | HTTP transport (`fetch` or `curl`) |
