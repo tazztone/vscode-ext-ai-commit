@@ -52,6 +52,8 @@ Notes:
 | `kargnas.aiCommit.model` | `google/gemini-2.5-flash-lite` | Model ID |
 | `kargnas.aiCommit.commitLanguage` | `auto` | Output language (`ko`, `ja`, etc.) |
 | `kargnas.aiCommit.customInstructions` | `""` | Custom rules/instructions for commit messages |
+| `kargnas.aiCommit.instructionPrompt` | `""` | Advanced: custom override for `<instructions>` block |
+| `kargnas.aiCommit.taskPrompt` | `""` | Advanced: custom override for `<task>` block |
 | `kargnas.aiCommit.systemPrompt` | `"You write excellent..."` | System persona/role (use customInstructions for rules) |
 | `kargnas.aiCommit.maxPatchBytes` | `50000` | Max total diff size |
 | `kargnas.aiCommit.previousCommitLimit` | `10` | Recent commits for context |
