@@ -147,6 +147,8 @@ async function getConfig(){
   const c = vscode.workspace.getConfiguration();
   const commitLanguageRaw = readSetting(c, 'commitLanguage');
   const commitLanguage = commitLanguageRaw === undefined ? '' : String(commitLanguageRaw || '').trim();
+  const customInstructionsRaw = readSetting(c, 'customInstructions');
+  const customInstructions = customInstructionsRaw === undefined ? '' : String(customInstructionsRaw || '').trim();
   const endpointRaw = readSetting(c, 'endpoint') || 'https://openrouter.ai/api/v1/chat/completions';
   const endpoint = normalizeEndpoint(endpointRaw, !!readSetting(c, 'endpointRewrite'));
   const compat = c.get('dish-ai-commit.features.branchName.systemPrompt', '');
@@ -173,7 +175,8 @@ async function getConfig(){
     heavyDiffMaxFiles: clampNumber(readSetting(c, 'heavyDiffMaxFiles'), 3, 0, 6),
     logPromptMaxChars: clampNumber(readSetting(c, 'logPromptMaxChars'), 0, 0, 1000000),
     autoStage: !!readSetting(c, 'autoStage'),
-    commitLanguage
+    commitLanguage,
+    customInstructions
   };
 }
 

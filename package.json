@@ -242,9 +242,16 @@
           "default": "auto",
           "description": "Preferred language for commit subject/body (auto keeps default British English)."
         },
+        "kargnas.aiCommit.customInstructions": {
+          "type": "string",
+          "default": "",
+          "editPresentation": "multilineText",
+          "description": "Custom instructions or rules injected into the prompt for commit message generation (e.g., 'always use imperative mood', 'mention Jira ticket from branch', 'keep scope under 12 characters')."
+        },
         "kargnas.aiCommit.systemPrompt": {
           "type": "string",
-          "default": "You write excellent Conventional Commits for engineers and PMs."
+          "default": "You write excellent Conventional Commits for engineers and PMs.",
+          "description": "System role/persona instruction. Defines the AI role. To guide formatting, tone, or repository-specific commit rules, use 'kargnas.aiCommit.customInstructions' instead."
         }
       }
     }
