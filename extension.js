@@ -1201,7 +1201,7 @@ async function collectContext(repo, cfg){
   return context;
 }
 
-function buildUserPrompt(context){
+function buildUserPrompt(context, customInstructions){
   const meta = context.repo_meta;
   const intent = context.intent_signals;
   const commitLanguage = meta.commit_language || 'auto';
@@ -1215,9 +1215,13 @@ function buildUserPrompt(context){
     return `${header}\n${body}`;
   }).join('\n\n');
 
+  const trimmedCustom = (customInstructions || '').trim();
+  const userInstructionsBlock = trimmedCustom ? `\n\n<user_instructions>\n${trimmedCustom}\n</user_instructions>` : '';
+  const taskCustomDirective = trimmedCustom ? '\n- Comply strictly with all directives provided in <user_instructions>.' : '';
+
   return `<instructions>
 Analyze the repository context and staged diffs. Identify every significant, user-visible change and gather the literal values (versions, configuration keys, renamed resources).
-</instructions>
+</instructions>${userInstructionsBlock}
 
 <context>
 <repo_meta>
@@ -1267,7 +1271,7 @@ Produce one commit_message JSON object that satisfies the schema referenced by t
 - Craft the subject in the requested language, combine all primary changes in one sentence, and embed explicit values (version changes, renamed services, configuration keys and new values).
 - Emit the body as a JSON array of terse fragments in the requested language (e.g., "env config cleanup"), one per significant change, each naming the concrete artifact/key/value and omitting terminal punctuation.
 - Cover every significant change surfaced in the context without inventing data or repeating git metadata.
-- Ignore the languages used in previous commits or diffs; the subject, body, and rationale must obey the requested language_instruction exactly. If compliance is impossible, emit LANGUAGE_POLICY_VIOLATION per the language_instruction guidance.
+- Ignore the languages used in previous commits or diffs; the subject, body, and rationale must obey the requested language_instruction exactly. If compliance is impossible, emit LANGUAGE_POLICY_VIOLATION per the language_instruction guidance.${taskCustomDirective}
 </task>`;
 }
 
@@ -1533,7 +1537,7 @@ async function generate(...commandArgs){
     const baseSystemPrompt = cfg.systemPrompt || SYSTEM_PROMPT;
     const languageInstruction = buildLanguageInstruction(cfg.commitLanguage);
     const systemPrompt = languageInstruction ? `${baseSystemPrompt}\n${languageInstruction}` : baseSystemPrompt;
-    const userPrompt = buildUserPrompt(context);
+    const userPrompt = buildUserPrompt(context, cfg.customInstructions);
 
     const payload = isResponses(cfg.endpoint)
       ? { model: cfg.model, input: toResponses([{role:'system',content:systemPrompt},{role:'user',content:userPrompt}]), temperature: 0.2, max_output_tokens: 800 }
