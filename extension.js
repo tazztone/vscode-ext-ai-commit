@@ -464,13 +464,22 @@ function parseLanguages(files){
   return Array.from(map.keys()).sort();
 }
 
+function cleanGitPath(p){
+  let s = (p || '').trim();
+  if(s.startsWith('"') && s.endsWith('"')){
+    s = s.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  }
+  return s.replace(/^["']|["']$/g, '');
+}
+
 function buildServiceMap(files){
   const map = {};
   files.forEach(rel=>{
-    const parts = rel.split('/');
+    const cleaned = cleanGitPath(rel);
+    const parts = cleaned.split('/');
     if(parts.length > 1){
-      const key = parts[0];
-      if(!map[key]) map[key] = key;
+      const key = parts[0].replace(/^["']|["']$/g, '');
+      if(key && !map[key]) map[key] = key;
     }
   });
   return map;
@@ -487,12 +496,37 @@ function parseBranchHints(branch){
   return Array.from(new Set(hints));
 }
 
-function detectIntent(diffText){
-  const lower = diffText.toLowerCase();
-  if(/n\+1|bug|fix|issue|error|exception/.test(lower)) return 'bugfix';
-  if(/perf|cache|latency|optimi[sz]e|memo/.test(lower)) return 'perf';
-  if(/refactor|cleanup|rename/.test(lower)) return 'refactor';
-  if(/style|format|whitespace/.test(lower)) return 'style';
+function detectIntent(diffText, pathname = ''){
+  const p = (pathname || '').toLowerCase();
+  const basename = path.basename(p);
+  const ext = path.extname(p);
+
+  if(/^(readme|license|contributing|changelog|agents|todo|authors)(\..+)?$/i.test(basename) ||
+     ext === '.md' || ext === '.rst' || ext === '.txt' ||
+     /(?:^|\/)docs?\//i.test(p)){
+    return 'docs';
+  }
+
+  if(/(?:^|\/)(?:tests?|__tests?|spec)\//i.test(p) ||
+     /\.(?:test|spec)\.[^.]+$/i.test(basename)){
+    return 'test';
+  }
+
+  if(/(?:^|\/)\.github\//i.test(p) ||
+     /^(dockerfile|\.gitignore|\.dockerignore|\.editorconfig|package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/i.test(basename)){
+    return 'chore';
+  }
+
+  const addedLines = (diffText || '').split('\n')
+    .filter(line => line.startsWith('+') && !line.startsWith('+++'))
+    .map(line => line.slice(1).toLowerCase())
+    .join(' ');
+
+  if(/\b(n\+1|bug|fix|fixes|fixed|issue|error|exception|crash|overflow|nullpointer)\b/.test(addedLines)) return 'bugfix';
+  if(/\b(perf|performance|cache|latency|optimi[sz]e|memo|memoize|speedup)\b/.test(addedLines)) return 'perf';
+  if(/\b(refactor|cleanup|rename|restructure|decompose|extract)\b/.test(addedLines)) return 'refactor';
+  if(/\b(style|format|lint|whitespace|prettier|indent)\b/.test(addedLines)) return 'style';
+
   return 'unknown';
 }
 
@@ -853,13 +887,20 @@ function parseHunks(diff){
 function summariseFile(pathname, diffText){
   const change_kind = pathname.includes(' -> ') ? 'renamed' : 'modified';
   const symbols_changed = extractSymbols(diffText);
-  const intent_guess = detectIntent(diffText);
+  const intent_guess = detectIntent(diffText, pathname);
   let high_level = 'auto-summary unavailable';
-  if(intent_guess === 'bugfix') high_level = 'potential bug fix indicators detected';
+  if(intent_guess === 'docs') high_level = 'documentation update';
+  else if(intent_guess === 'test') high_level = 'test coverage or test fixture update';
+  else if(intent_guess === 'chore') high_level = 'configuration or maintenance adjustments';
+  else if(intent_guess === 'bugfix') high_level = 'potential bug fix indicators detected';
   else if(intent_guess === 'perf') high_level = 'performance-oriented change';
   else if(intent_guess === 'refactor') high_level = 'structural refactor indications';
   else if(intent_guess === 'style') high_level = 'formatting adjustments';
-  const risk = intent_guess === 'bugfix' ? 'medium' : 'unknown';
+
+  let risk = 'unknown';
+  if(intent_guess === 'docs' || intent_guess === 'test' || intent_guess === 'chore' || intent_guess === 'style') risk = 'low';
+  else if(intent_guess === 'bugfix') risk = 'medium';
+
   return { path: pathname, change_kind, symbols_changed, high_level, intent_guess, risk };
 }
 
