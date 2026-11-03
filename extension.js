@@ -52,9 +52,9 @@ const COMMIT_SCHEMA_OBJECT = {
     },
     body: {
       type: 'array',
-      minItems: 1,
+      minItems: 0,
       maxItems: 6,
-      description: 'Each entry is a terse fragment (e.g., "env config cleanup") covering one significant change.',
+      description: 'Each entry is a terse fragment (e.g., "env config cleanup") covering one significant change. Empty array for simple commits.',
       items: {
         type: 'string',
         minLength: 4,
@@ -1307,10 +1307,10 @@ ${testsJson}
 
 <task>
 Produce one commit_message JSON object that satisfies the schema referenced by the system prompt and COMMIT_RESPONSE_FORMAT.
-- Choose the commit type per the provided rules (feat for DX/capability gains, fix for bug remediation, chore for routine maintenance) unless another allowed type better matches the dominant change.
+- Select the most accurate commit type based on the primary change: docs (documentation/markdown), test (tests/fixtures), fix (bug repairs), feat (features/enhancements), chore (maintenance/dependencies), refactor (restructuring), style (formatting), perf (performance).
 - Pick the most representative scope token (single lowercase module/folder name) or "" when ambiguous.
 - Craft the subject in the requested language, combine all primary changes in one sentence, and embed explicit values (version changes, renamed services, configuration keys and new values).
-- Emit the body as a JSON array of terse fragments in the requested language (e.g., "env config cleanup"), one per significant change, each naming the concrete artifact/key/value and omitting terminal punctuation.
+- Emit the body as a JSON array of terse fragments in the requested language (e.g., "env config cleanup"), one per significant change, each naming the concrete artifact/key/value and omitting terminal punctuation. For small, single-purpose changes where the subject is fully explanatory, emit an empty body array [].
 - Cover every significant change surfaced in the context without inventing data or repeating git metadata.
 - Ignore the languages used in previous commits or diffs; the subject, body, and rationale must obey the requested language_instruction exactly. If compliance is impossible, emit LANGUAGE_POLICY_VIOLATION per the language_instruction guidance.${taskCustomDirective}
 </task>`;
